@@ -259,3 +259,36 @@ button, input, select { font: inherit; color: inherit; }
   .card-stage { background: none; color: var(--ink); }
   .flip.back .flip-inner { transform: none; }
 }
+
+/* Download and print */
+.print-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; padding-bottom: 60px; }
+@media (max-width: 960px) { .print-layout { grid-template-columns: minmax(0, 1fr); } }
+.sheet-wrap { padding: 20px; overflow-x: auto; background: #dfe6e2; }
+.sheet { background: #fff; width: 210mm; max-width: 100%; margin: 0 auto; padding: 14mm 12mm; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: grid; gap: 10mm; }
+.sheet-head { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.sheet-head b { font-size: 15px; }
+.sheet-cards { display: flex; flex-wrap: wrap; gap: 10mm; justify-content: center; }
+.sheet-note { font-size: 12px; color: var(--muted); }
+.cut { margin: 0; position: relative; padding: 5mm; }
+.cut figcaption { position: absolute; top: -3.5mm; left: 9mm; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+.cut::before, .cut::after { content: ""; position: absolute; inset: 1mm; pointer-events: none;
+  background:
+    linear-gradient(#333, #333) left 4mm top 0 / 0.3mm 3mm no-repeat, linear-gradient(#333, #333) left 0 top 4mm / 3mm 0.3mm no-repeat,
+    linear-gradient(#333, #333) right 4mm top 0 / 0.3mm 3mm no-repeat, linear-gradient(#333, #333) right 0 top 4mm / 3mm 0.3mm no-repeat,
+    linear-gradient(#333, #333) left 4mm bottom 0 / 0.3mm 3mm no-repeat, linear-gradient(#333, #333) left 0 bottom 4mm / 3mm 0.3mm no-repeat,
+    linear-gradient(#333, #333) right 4mm bottom 0 / 0.3mm 3mm no-repeat, linear-gradient(#333, #333) right 0 bottom 4mm / 3mm 0.3mm no-repeat; }
+.cut::after { display: none; }
+.actual { width: 85.6mm; }
+.actual .idcard { box-shadow: none; border: 0.2mm solid #cfd8d3; border-radius: 3.2mm; }
+@media (max-width: 560px) { .sheet { padding: 8mm 4mm; } .actual { width: min(85.6mm, 78vw); } }
+
+@media print {
+  @page { size: A4; margin: 0; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; }
+  .print-page { padding: 0; max-width: none; }
+  .print-layout { display: block; padding: 0; }
+  .sheet-wrap { background: none; border: 0; padding: 0; border-radius: 0; }
+  .sheet { box-shadow: none; width: 210mm; margin: 0; }
+  .actual { width: 85.6mm !important; }
+}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Maximize2, Printer, RotateCw, X } from "lucide-react";
+import Link from "next/link";
+import { Download, Maximize2, RotateCw, X } from "lucide-react";
 
 /** Card stage: flip the card and open a full-screen QR with a live clock (a screenshot would show a frozen time). */
 export function Wallet({ front, back, qrSvg, name, regNo }: { front: React.ReactNode; back: React.ReactNode; qrSvg: string; name: string; regNo: string }) {
@@ -26,7 +27,7 @@ export function Wallet({ front, back, qrSvg, name, regNo }: { front: React.React
       <div className="card-actions no-print">
         <button className="btn btn-lg" style={{ background: "#fff", color: "var(--brand)", borderColor: "#fff" }} onClick={() => setShowQr(true)} data-testid="show-qr"><Maximize2 size={17} /> Show QR to lecturer</button>
         <button className="btn btn-ghost-dark" onClick={() => setFlipped((f) => !f)} data-testid="flip"><RotateCw size={16} /> {flipped ? "Front" : "Back"}</button>
-        <button className="btn btn-ghost-dark" onClick={() => window.print()}><Printer size={16} /> Print</button>
+        <Link className="btn btn-ghost-dark" href="/card/print" data-testid="open-print"><Download size={16} /> Download or print</Link>
       </div>
       {showQr && (
         <div className="qr-modal" role="dialog" aria-label="QR code" onClick={() => setShowQr(false)} data-testid="qr-modal">

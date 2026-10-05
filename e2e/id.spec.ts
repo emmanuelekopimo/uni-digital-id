@@ -89,3 +89,30 @@ test("students cannot open lecturer pages", async ({ page }) => {
   await expect(page).toHaveURL(/\/card$/);
   await expect(page.getByTestId("card-name")).toHaveText("ETUK Uduak");
 });
+
+test("student downloads the card as PNG and PDF and opens the print sheet", async ({ page, browser }) => {
+  await signIn(page, "student");
+  await page.getByTestId("open-print").click();
+  await expect(page).toHaveURL(/\/card\/print$/);
+  await expect(page.getByTestId("print-sheet")).toContainText("UU/23/CSC/045");
+  await expect(page.getByTestId("print-card")).toBeVisible();
+
+  const [front] = await Promise.all([page.waitForEvent("download"), page.getByTestId("download-front").click()]);
+  expect(front.suggestedFilename()).toBe("uniuyo-id-uu-23-csc-045-front.png");
+  const [pdf] = await Promise.all([page.waitForEvent("download"), page.getByTestId("download-pdf").click()]);
+  expect(pdf.suggestedFilename()).toBe("uniuyo-id-uu-23-csc-045.pdf");
+
+  const png = await page.request.get("/card/download/front.png");
+  expect(png.headers()["content-type"]).toBe("image/png");
+  const buf = await png.body();
+  expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1012, 638]);
+  const pdfRes = await page.request.get("/card/download/card.pdf");
+  expect(pdfRes.headers()["content-type"]).toBe("application/pdf");
+  expect((await pdfRes.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  expect((await page.request.get("/card/download/other.txt")).status()).toBe(404);
+
+  const anon = await browser.newContext();
+  const res = await anon.request.get("/card/download/card.pdf", { maxRedirects: 0 });
+  expect(res.status()).toBe(307);
+  await anon.close();
+});
