@@ -17,7 +17,11 @@ test("student sees their card, QR code and courses; the QR link verifies publicl
   await expect(page.getByTestId("card-name")).toHaveText("AKPAN Ubong Daniel");
   await expect(page.getByTestId("card-regno")).toHaveText("UU/23/CSC/045");
   await expect(page.getByTestId("card-status")).toContainText("Valid until");
-  await expect(page.locator("#courses + .table-wrap")).toContainText("CSC 311");
+  await expect(page.getByTestId("course-list")).toContainText("CSC 311");
+  await page.getByTestId("show-qr").click();
+  await expect(page.getByTestId("qr-modal")).toContainText("UU/23/CSC/045");
+  await expect(page.getByTestId("qr-modal").locator(".clock")).toHaveText(/\d{2}:\d{2}:\d{2}/);
+  await page.getByTestId("qr-modal").click({ position: { x: 5, y: 5 } });
   const qr = await page.getByTestId("id-card").getAttribute("data-qr");
   expect(qr).toMatch(/\/verify\/UU1\./);
   await page.goto(new URL(qr!).pathname);
@@ -26,12 +30,16 @@ test("student sees their card, QR code and courses; the QR link verifies publicl
 
 test("lecturer verifies a class member, a Law student, and a forged code", async ({ page }) => {
   await signIn(page, "lecturer");
-  await expect(page.getByTestId("course-select")).toHaveValue(/\d+/);
-  await expect(page.getByRole("heading", { name: /CSC 311/ })).toBeVisible();
+  await expect(page.getByTestId("session-title")).toContainText("CSC 311: Operating Systems");
+  await expect(page.getByTestId("course-option").first()).toHaveAttribute("aria-current", "true");
+  await expect(page.getByTestId("waiting")).toBeVisible();
 
-  await page.getByText("Sample: Ubong Akpan (CSC 311)").click();
+  await page.getByTestId("samples").getByText("Ubong Akpan (CSC 311)").click();
   await expect(page.getByTestId("result").first()).toHaveAttribute("data-result", "in_class");
   await expect(page.getByTestId("verdict").first()).toHaveText("Belongs to CSC 311");
+  await expect(page.getByTestId("verdict-big")).toHaveText("ADMIT");
+  await expect(page.getByTestId("present-count")).toHaveText("1");
+  await expect(page.getByTestId("session-log")).toContainText("Ubong Akpan");
 
   await page.getByTestId("scan-input").fill("uu/23/law/112");
   await page.getByTestId("verify").click();
@@ -43,6 +51,7 @@ test("lecturer verifies a class member, a Law student, and a forged code", async
   await page.getByTestId("verify").click();
   await expect(page.getByTestId("result").first()).toHaveAttribute("data-result", "invalid");
   await expect(page.getByTestId("verdict").first()).toHaveText("Not a UniUyo ID");
+  await expect(page.getByTestId("verdict-big")).toHaveText("REJECT");
 });
 
 test("lecturer uploads a photo of a QR code and it is decoded in the browser", async ({ page }) => {
@@ -59,9 +68,19 @@ test("empty input shows an inline error and the roster lists the class", async (
   await page.getByTestId("scan-input").fill("ab");
   await page.getByTestId("verify").click();
   await expect(page.getByTestId("scan-error")).toContainText("registration number");
-  await page.getByRole("link", { name: /CSC 311/ }).first().click();
+  await page.getByRole("link", { name: "Attendance register" }).click();
   await expect(page.getByTestId("enrolled-count")).toHaveText("21");
   await expect(page.getByTestId("roster-row").filter({ hasText: "ADEBAYO Tobi" })).toContainText("Suspended");
+});
+
+test("scan log filters by result group", async ({ page }) => {
+  await signIn(page, "lecturer");
+  await page.getByTestId("tab-log").click();
+  await page.getByRole("link", { name: "Rejected" }).click();
+  await expect(page).toHaveURL(/group=rejected/);
+  const pills = await page.getByTestId("scan-log").locator("tbody .pill").allTextContents();
+  expect(pills.length).toBeGreaterThan(0);
+  for (const p of pills) expect(["Suspended", "Old card", "Not in register", "Forged or invalid"]).toContain(p);
 });
 
 test("students cannot open lecturer pages", async ({ page }) => {

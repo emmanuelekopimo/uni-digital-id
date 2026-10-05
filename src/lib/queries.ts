@@ -123,3 +123,57 @@ export async function studentByRegNo(database: DB, regNo: string) {
   const [s] = await database.select().from(students).where(eq(students.regNo, regNo));
   return s ?? null;
 }
+
+const dayStart = (today: string) => new Date(`${today}T00:00:00+01:00`);
+
+/** Today's checks at one of the lecturer's classes, newest first. */
+export async function sessionLog(database: DB, lecturerId: number, courseId: number, today: string) {
+  return database
+    .select({
+      id: scans.id,
+      result: scans.result,
+      at: scans.scannedAt,
+      studentId: scans.studentId,
+      firstName: students.firstName,
+      lastName: students.lastName,
+      regNo: students.regNo,
+      department: students.department,
+      gender: students.gender,
+    })
+    .from(scans)
+    .leftJoin(students, eq(students.id, scans.studentId))
+    .where(and(eq(scans.lecturerId, lecturerId), eq(scans.courseId, courseId), gte(scans.scannedAt, dayStart(today))))
+    .orderBy(desc(scans.scannedAt));
+}
+
+/** Every course the lecturer teaches with class size and today's verified count. */
+export async function courseOverview(database: DB, lecturerId: number, today: string) {
+  const since = dayStart(today);
+  return database
+    .select({
+      course: courses,
+      enrolled: sql<number>`(select count(*)::int from enrollments e where e.course_id = "courses"."id")`,
+      presentToday: sql<number>`(select count(distinct s.student_id)::int from scans s where s.course_id = "courses"."id" and s.result = 'in_class' and s.scanned_at >= ${since})`,
+      flaggedToday: sql<number>`(select count(*)::int from scans s where s.course_id = "courses"."id" and s.result <> 'in_class' and s.scanned_at >= ${since})`,
+      lastScan: sql<Date | null>`(select max(s.scanned_at) from scans s where s.course_id = "courses"."id")`,
+    })
+    .from(courses)
+    .where(eq(courses.lecturerId, lecturerId))
+    .orderBy(desc(courses.level), desc(courses.code));
+}
+
+/** The lecturer's full scan history, optionally filtered by course or result group. */
+export async function scanLog(database: DB, lecturerId: number, opts: { courseId?: number; group?: "admitted" | "flagged" | "rejected" } = {}, limit = 200) {
+  const groups = { admitted: ["in_class"], flagged: ["same_department", "other_department", "expired"], rejected: ["suspended", "revoked", "unknown", "invalid"] } as const;
+  const conds = [eq(scans.lecturerId, lecturerId)];
+  if (opts.courseId) conds.push(eq(scans.courseId, opts.courseId));
+  if (opts.group) conds.push(sql`${scans.result} in (${sql.join(groups[opts.group].map((g) => sql`${g}`), sql`, `)})`);
+  return database
+    .select({ id: scans.id, result: scans.result, at: scans.scannedAt, code: courses.code, firstName: students.firstName, lastName: students.lastName, regNo: students.regNo, department: students.department })
+    .from(scans)
+    .innerJoin(courses, eq(courses.id, scans.courseId))
+    .leftJoin(students, eq(students.id, scans.studentId))
+    .where(and(...conds))
+    .orderBy(desc(scans.scannedAt))
+    .limit(limit);
+}

@@ -2,7 +2,7 @@
 
 Digital student ID cards with QR verification for the University of Uyo. Each student in the existing register gets an ID card with a signed QR code. A lecturer scans it and immediately sees whether the person is a UniUyo student and whether they belong to the class being taught.
 
-![Lecturer scanner with results](docs/screenshot.png)
+![Lecturer checkpoint after a scan](docs/screenshot.png)
 
 Full documentation with annotated screenshots: [docs/UniUyo-ID-Documentation.pdf](docs/UniUyo-ID-Documentation.pdf)
 
@@ -10,9 +10,10 @@ Full documentation with annotated screenshots: [docs/UniUyo-ID-Documentation.pdf
 
 - Student ID card (front and back) with photo, registration number, department, level, expiry and a QR code, plus registered courses; printable
 - QR codes carry an HMAC signature, so they cannot be forged or edited; reissuing a card (a new card version) invalidates the old QR
-- Lecturer scanner: camera (jsQR in the browser), photo upload, paste a code, or type a registration number
+- Lecturer checkpoint per class: camera viewport (jsQR in the browser), photo upload, pasted code or typed registration number, with live admitted and flagged counters
 - One answer per scan: green when the student is registered for the course; amber for a UniUyo student from the same or another department who is not on the class list, or an expired card; red for a forged code, an unknown or suspended student, or a replaced card
-- Class list per course showing who was verified today and which cards have problems
+- Attendance register per class (present today, card problems) and a scan log filtered by result or course
+- Student ID wallet: a security-printed card that flips, prints and shows its QR full screen with a live clock
 - Public card check page for anyone who scans the QR with a phone camera
 - Every query is scoped to the signed-in lecturer or student
 
