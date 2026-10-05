@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { History, IdCard, LayoutGrid, LogOut, ScanLine } from "lucide-react";
+import { History, IdCard, LayoutGrid, LogOut, Printer, ScanLine } from "lucide-react";
 import type { User } from "@/db/schema";
 import { logout } from "@/app/actions/auth";
 import { avatarUri } from "@/lib/avatar";
 
-type Tab = "checkpoint" | "classes" | "log" | "card";
+type Tab = "checkpoint" | "classes" | "log" | "card" | "print";
 
 export function AppBar({ user, active }: { user: User; active: Tab }) {
   const tabs =
@@ -14,7 +14,10 @@ export function AppBar({ user, active }: { user: User; active: Tab }) {
           { key: "classes", href: "/courses", label: "Classes", Icon: LayoutGrid },
           { key: "log", href: "/log", label: "Scan log", Icon: History },
         ]
-      : [{ key: "card", href: "/card", label: "My ID", Icon: IdCard }];
+      : [
+          { key: "card", href: "/card", label: "My ID", Icon: IdCard },
+          { key: "print", href: "/card/print", label: "Download and print", Icon: Printer },
+        ];
   return (
     <header className="bar no-print">
       <div className="wrap bar-inner">

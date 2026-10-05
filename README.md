@@ -13,7 +13,8 @@ Full documentation with annotated screenshots: [docs/UniUyo-ID-Documentation.pdf
 - Lecturer checkpoint per class: camera viewport (jsQR in the browser), photo upload, pasted code or typed registration number, with live admitted and flagged counters
 - One answer per scan: green when the student is registered for the course; amber for a UniUyo student from the same or another department who is not on the class list, or an expired card; red for a forged code, an unknown or suspended student, or a replaced card
 - Attendance register per class (present today, card problems) and a scan log filtered by result or course
-- Student ID wallet: a security-printed card that flips, prints and shows its QR full screen with a live clock
+- Student ID wallet: a security-printed card that flips and shows its QR full screen with a live clock
+- Download and print page: the card at actual size (85.6 x 54 mm) with crop marks, a print-ready A4 PDF, and front and back as 1012 x 638 PNG images (300 dpi)
 - Public card check page for anyone who scans the QR with a phone camera
 - Every query is scoped to the signed-in lecturer or student
 
