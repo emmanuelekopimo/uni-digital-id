@@ -18,7 +18,7 @@ const TODAY = "2026-10-05";
 const PORT = 3330;
 const BASE = `http://localhost:${PORT}`;
 const DB_URL = process.env.TEST_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/uniid_test";
-const ACCENT = "#10a37f";
+const ACCENT = "#c99a2e";
 
 async function reseed() {
   const pool = createPool(DB_URL);
@@ -66,18 +66,17 @@ const login = async (page: Page, as: string) => {
 };
 
 const scanSamples = async (page: Page) => {
-  await page.getByText("Sample: Uduak Etuk (Law)").click();
-  await page.getByTestId("result").first().waitFor();
-  await page.getByTestId("scan-input").fill("UU/23/CSC/045");
-  await page.getByTestId("verify").click();
-  await page.waitForFunction(() => document.querySelectorAll("[data-testid=result]").length >= 2);
+  await page.getByTestId("samples").getByText("Uduak Etuk (Law)").click();
+  await page.getByTestId("result").waitFor();
+  await page.getByTestId("session-log").waitFor();
 };
 
 async function main() {
   // Run the test suites first: integration tests reuse and change the test database.
   const counts = testCounts();
   const seeded = await reseed();
-  const server = spawn("npx", ["next", "start", "-p", String(PORT)], {
+  const server = spawn("node_modules/.bin/next", ["start", "-p", String(PORT)], {
+    detached: true,
     env: { ...process.env, DATABASE_URL: DB_URL, UNIID_TODAY: TODAY, SESSION_SECRET: "docs-secret-uniid-0123456789", NODE_ENV: "production" },
     stdio: "ignore",
   });
@@ -85,54 +84,71 @@ async function main() {
     await waitHealthy();
     const shots: Shot[] = [
       { key: "login", path: "/login", callouts: [
-        { selector: "#email", text: "Email and password, prefilled with the lecturer demo account." },
-        { selector: "[data-testid=sign-in]", text: "Continue checks the bcrypt hash and sets a signed JWT session cookie (HTTP-only)." },
-        { selector: ".demo-list", text: "One click fills in the lecturer, a CSC 311 student, or a Law student for the 'not in this class' case." },
-        { selector: ".login-photo .cap", text: "Real lecture theatre photo (Creative Commons)." },
+        { selector: ".role-pick", text: "Pick a demo account: the lecturer, a CSC 311 student, or a Law student for the 'not in this class' case." },
+        { selector: "#email", text: "Fields are prefilled with the lecturer account." },
+        { selector: "[data-testid=sign-in]", text: "Sign in checks the bcrypt hash and sets a signed JWT in an HTTP-only cookie." },
+        { selector: ".login-art .art-copy", text: "What the system does, over a real lecture theatre photo (Creative Commons)." },
       ] },
-      { key: "card", path: "/card", as: "student", height: 1000, callouts: [
+      { key: "card", path: "/card", as: "student", callouts: [
+        { selector: "[data-testid=id-card] .face", text: "ID photo: a generated portrait (DiceBear), never a real person's face." },
+        { selector: "[data-testid=card-regno]", text: "Registration number, name, department and level from the student register." },
+        { selector: "[data-testid=id-card] .qr", text: "Signed QR code. It links to the public verification page and cannot be forged without the server key." },
+        { selector: "[data-testid=show-qr]", text: "Shows the QR full screen with a live clock, so a screenshot of someone else's card is easy to spot." },
         { selector: "[data-testid=card-status]", text: "Card status from cardState(): valid, expiring within 30 days, expired or suspended." },
-        { selector: ".idcard .photo", text: "ID photo: a locally generated portrait (DiceBear), never a real person's face." },
-        { selector: "[data-testid=card-regno]", text: "Name, registration number, department and level come from the student register." },
-        { selector: ".idcard .qr", text: "QR code with a signed verification link. It cannot be forged or edited without the server key." },
-        { selector: ".table-wrap", text: "Courses this student is registered for, so they know which classes the scan will pass." },
+        { selector: "[data-testid=course-list]", text: "The classes this card admits the student to." },
+      ] },
+      { key: "qr", path: "/card", as: "student", prepare: async (p) => { await p.getByTestId("show-qr").click(); await p.waitForTimeout(1200); }, callouts: [
+        { selector: ".qr-big", text: "Large QR for the lecturer's camera." },
+        { selector: ".qr-sheet .clock", text: "Live clock that ticks every second." },
       ] },
       { key: "scan", path: "/scan", as: "lecturer", callouts: [
-        { selector: ".sidebar .sb-title + a", text: "Sidebar like a chat history: the lecturer's courses and recent scans, coloured by result." },
-        { selector: ".hero h1", text: "The selected course is part of every check." },
-        { selector: "[data-testid=scan-input]", text: "Paste the card code or type a registration number such as UU/23/CSC/045." },
-        { selector: "[data-testid=camera-toggle]", text: "Camera scanner (jsQR reads frames from the phone or laptop camera) and Photo upload." },
-        { selector: "[data-testid=samples]", text: "Sample cards from the seeded register for rehearsing with one device." },
+        { selector: "[data-testid=course-switch]", text: "Switch between the lecturer's classes. Every check is made against the selected class." },
+        { selector: ".counters", text: "Today's tally for the class: admitted, flagged and class size." },
+        { selector: "[data-testid=viewport]", text: "Camera viewport. jsQR reads the QR code from the video in the browser." },
+        { selector: ".manual", text: "Type a registration number or paste a card code. Upload QR photo reads a picture instead." },
+        { selector: "[data-testid=samples]", text: "Demo cards from the seeded register, for rehearsing with one device." },
+        { selector: "[data-testid=waiting]", text: "Result panel, waiting for the first card." },
       ] },
-      { key: "results", path: "/scan", as: "lecturer", prepare: scanSamples, callouts: [
-        { selector: ".bubble-user", text: "What was scanned, shown like a sent message." },
-        { selector: "[data-testid=result][data-result=in_class] .result-head", text: "Green: genuine card and registered for CSC 311." },
-        { selector: "[data-testid=result][data-result=other_department] .result-head", text: "Amber: a real UniUyo student, but from the Law department and not on this class list." },
-        { selector: "[data-testid=result][data-result=other_department] .result-foot", text: "How it was checked (QR signature or reg. number) and whether the person is a confirmed UniUyo student." },
+      { key: "result", path: "/scan", as: "lecturer", prepare: scanSamples, callouts: [
+        { selector: ".verdict-band", text: "The instruction in large type: NOT IN THIS CLASS, in amber." },
+        { selector: ".verdict-body", text: "Student photo and register details, so the lecturer can compare the face with the person." },
+        { selector: ".checks", text: "The three checks behind the answer: card genuine, student in good standing, registered for this course." },
+        { selector: "[data-testid=session-log]", text: "Today's log for this class updates after every scan." },
       ] },
-      { key: "roster", path: "/scan", as: "lecturer", prepare: async (p) => { await p.getByRole("link", { name: /CSC 311/ }).first().click(); await p.getByTestId("enrolled-count").waitFor(); }, callouts: [
-        { selector: ".stats", text: "Class size, students verified today, and flags (outsiders scanned today plus card problems)." },
-        { selector: "[data-testid=roster-row] .pill.red", text: "A suspended student on the class list." },
-        { selector: "[data-testid=roster-row] .pill.amber", text: "A card that expires within 30 days." },
-        { selector: ".topline .btn", text: "Jump to the scanner with this course selected." },
+      { key: "admit", path: "/scan", as: "lecturer", prepare: async (p) => { await p.getByTestId("samples").getByText("Ubong Akpan (CSC 311)").click(); await p.locator("[data-result=in_class]").waitFor(); await p.waitForTimeout(600); }, callouts: [
+        { selector: ".verdict-band", text: "Green ADMIT: genuine card, active student, registered for CSC 311." },
+        { selector: "[data-testid=present-count]", text: "The Admitted counter goes up." },
+      ] },
+      { key: "classes", path: "/courses", as: "lecturer", callouts: [
+        { selector: "[data-testid=course-tile]", text: "Each class with admitted-today progress, flags and the last scan time." },
+        { selector: "[data-testid=course-tile] .btn-brand", text: "Opens the checkpoint for that class." },
+      ] },
+      { key: "register", path: "/courses/1", as: "lecturer", callouts: [
+        { selector: ".stat-row", text: "Registered, admitted today, not yet checked, and card problems." },
+        { selector: "[data-testid=roster-row] .pill.bad", text: "A suspended student on the class list." },
+        { selector: "[data-testid=roster-row] .pill.ok", text: "Present means admitted at the checkpoint today." },
+      ] },
+      { key: "log", path: "/log", as: "lecturer", callouts: [
+        { selector: ".page-title + div", text: "Filter by result group (admitted, flagged, rejected) or by course." },
+        { selector: "[data-testid=scan-log]", text: "Every check with time, course, student and result." },
       ] },
       { key: "public", path: "/card", as: "student", prepare: async (p) => { const u = await p.getByTestId("id-card").getAttribute("data-qr"); await p.goto(`${BASE}${new URL(u!).pathname}`); }, callouts: [
-        { selector: "[data-testid=public-verdict]", text: "What any phone camera sees when it scans the card: a public page that only confirms the card is genuine and current." },
-        { selector: "main img", text: "Only details already printed on the card are shown. Class registration needs a lecturer login." },
+        { selector: ".stamp", text: "What any phone camera opens: a verification certificate with a stamp." },
+        { selector: ".cert .facts", text: "Only details printed on the card. Class registration needs a lecturer login." },
       ] },
       { key: "mcard", path: "/card", as: "student", mobile: true, callouts: [
-        { selector: "[data-testid=open-sidebar]", text: "The sidebar slides in from this button on phones." },
-        { selector: "[data-testid=id-card]", text: "The card scales with container query units so it stays the right shape at any width." },
+        { selector: "[data-testid=id-card]", text: "The card scales with container query units, so it keeps its shape on any phone." },
+        { selector: "[data-testid=show-qr]", text: "Big button to show the QR full screen." },
       ] },
-      { key: "mscan", path: "/scan", as: "lecturer", mobile: true, prepare: async (p) => { await p.getByText("Sample: Tobi Adebayo (suspended)").click(); await p.getByTestId("result").first().waitFor(); }, callouts: [
-        { selector: ".composer", text: "Composer with course, camera and photo buttons." },
-        { selector: "[data-testid=result]", text: "Red result: suspended student." },
+      { key: "mscan", path: "/scan", as: "lecturer", mobile: true, prepare: async (p) => { await p.getByTestId("samples").getByText("Tobi Adebayo (suspended)").click(); await p.getByTestId("result").waitFor(); await p.waitForTimeout(800); }, scrollTo: "[data-testid=result]", callouts: [
+        { selector: ".verdict-band", text: "On phones the page scrolls to the result after each scan: REJECT, student suspended." },
+        { selector: ".checks", text: "Which check failed." },
       ] },
     ];
-    const caps = await capture(BASE, shots, login, ".topline{position:static!important}@media (min-width: 861px){.sidebar{position:static!important}}");
+    const caps = await capture(BASE, shots, login, ".bar{position:static!important}");
     const f = (p: string) => require.resolve(p);
-    const fonts = fontFace("Inter", f("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2"));
-    const css = baseCss({ bg: "#ffffff", ink: "#0d0d0d", muted: "#6b6b6b", line: "#e5e5e5", accent: ACCENT, head: '"Inter", sans-serif', body: '"Inter", sans-serif' });
+    const fonts = fontFace("Inter", f("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")) + fontFace("JBMono", f("@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2"));
+    const css = baseCss({ bg: "#ffffff", ink: "#0d0d0d", muted: "#6b6b6b", line: "#e5e5e5", accent: ACCENT, head: '"Inter", sans-serif', body: '"Inter", sans-serif', mono: '"JBMono", monospace' });
     const fig = (k: string, cap: string) => figure(caps[k], cap, ACCENT);
     const e2eLine = counts.e2e.total ? `${counts.e2e.passed} of ${counts.e2e.total} passed (${counts.e2e.total - counts.e2e.mobile} desktop, ${counts.e2e.mobile} mobile)` : "run npm run test:e2e first";
     const logo = readFileSync("public/logo.svg", "utf8");
@@ -156,12 +172,12 @@ async function main() {
 
 <section class="section"><h2>1. Overview</h2>
 <table><tr><th>Who</th><th>What they do</th></tr>
-<tr><td>Student</td><td>Logs in and sees their ID card (front and back) with photo, registration number, department, level, expiry and QR code, plus their registered courses. Can print the card.</td></tr>
-<tr><td>Lecturer</td><td>Chooses one of their courses and scans a card with the camera, uploads a photo of the QR, or types a registration number. Sees a green, amber or red answer with the student's details. Sees the class list and who was verified today.</td></tr>
+<tr><td>Student</td><td>Logs in to a wallet view of their ID card (front and back) with photo, registration number, department, level, expiry and QR code. Can show the QR full screen with a live clock, print the card, and see the classes it admits them to.</td></tr>
+<tr><td>Lecturer</td><td>Opens the checkpoint for one of their classes and scans a card with the camera, uploads a photo of the QR, or types a registration number. Sees ADMIT, a warning or REJECT with the student&apos;s details and the three checks. Also sees each class register, who was admitted today, and a filterable scan log.</td></tr>
 <tr><td>Anyone</td><td>Scanning the QR with a normal phone camera opens a public page that confirms the card is genuine and current, without showing course details.</td></tr></table>
 <h3>The three questions a scan answers</h3>
 <ol><li>Is this card genuine? (the QR signature is checked)</li><li>Is this a UniUyo student in good standing? (register, card version, suspension, expiry)</li><li>Does this student belong to this class? (course registration, then department)</li></ol>
-<h3>Design</h3><p>The interface follows the visual style of ChatGPT: white canvas, a light grey sidebar with history, Inter type, a rounded composer box with tool buttons, and results shown like messages in a thread. It is a normal web app, not a chatbot.</p>
+<h3>Design</h3><p>The layout follows the job. Lecturers get a checkpoint console: a class session strip with live counters, a camera viewport with a scan frame, and a large result panel that says ADMIT, NOT IN THIS CLASS or REJECT in colour with the three checks listed underneath. Students get a wallet view of a security-printed ID card that flips, prints and shows its QR full screen. The palette is UniUyo green with a gold accent, Inter for text and JetBrains Mono for registration numbers.</p>
 </section>
 
 <section class="section"><h2>2. How the core logic works</h2>
@@ -186,7 +202,7 @@ signature = first 16 bytes of HMAC-SHA256(server secret, "UU1.&lt;reg&gt;.&lt;ve
 </section>
 
 <section class="section"><h2>3. Architecture and data model</h2>
-<div class="diagram"><div class="node"><b>Browser</b>Server-rendered pages. Client components: scanner (camera, jsQR), sidebar toggle, login demo buttons.</div><div class="node"><b>Next.js 16</b>Server Components, a Server Action for each scan, QR SVGs rendered on the server, proxy.ts route guard, /api/health.</div><div class="node"><b>PostgreSQL</b>Drizzle ORM, SQL migrations from drizzle-kit.</div></div>
+<div class="diagram"><div class="node"><b>Browser</b>Server-rendered pages. Client components: checkpoint (camera, jsQR, result panel), ID wallet (flip, full-screen QR), login demo buttons.</div><div class="node"><b>Next.js 16</b>Server Components, a Server Action for each scan, QR SVGs rendered on the server, proxy.ts route guard, /api/health.</div><div class="node"><b>PostgreSQL</b>Drizzle ORM, SQL migrations from drizzle-kit.</div></div>
 <table><tr><th>Table</th><th>Columns</th><th>Rules</th></tr>
 <tr><td>students</td><td>id, reg_no, first_name, last_name, other_name, gender, faculty, department, level, entry_year, status, id_issued_on, id_expires_on, card_version, blood_group</td><td>reg_no unique; the existing register</td></tr>
 <tr><td>users</td><td>id, name, email, password_hash, role (student, lecturer), department, student_id</td><td>email unique; student_id links a login to a register entry</td></tr>
@@ -194,19 +210,22 @@ signature = first 16 bytes of HMAC-SHA256(server secret, "UU1.&lt;reg&gt;.&lt;ve
 <tr><td>enrollments</td><td>id, student_id, course_id</td><td>unique (student_id, course_id)</td></tr>
 <tr><td>scans</td><td>id, lecturer_id, course_id, student_id, result, scanned_at</td><td>result is one of the eight verdicts</td></tr></table>
 <table><tr><th>Route</th><th>Who</th><th>Purpose</th></tr>
-<tr><td>/login</td><td>All</td><td>Log in, demo accounts</td></tr><tr><td>/card</td><td>Student</td><td>ID card, status and courses</td></tr>
-<tr><td>/scan</td><td>Lecturer</td><td>Scanner and results thread</td></tr><tr><td>/courses/[id]</td><td>Lecturer</td><td>Class list with today's checks</td></tr>
-<tr><td>/verify, /verify/[token]</td><td>Public</td><td>Card check for anyone</td></tr><tr><td>/api/health</td><td>Railway</td><td>Health check with database ping</td></tr></table>
+<tr><td>/login</td><td>All</td><td>Log in, demo accounts</td></tr><tr><td>/card</td><td>Student</td><td>ID wallet, status and courses</td></tr>
+<tr><td>/scan</td><td>Lecturer</td><td>Checkpoint for one class</td></tr><tr><td>/courses</td><td>Lecturer</td><td>Class overview</td></tr><tr><td>/courses/[id]</td><td>Lecturer</td><td>Attendance register</td></tr><tr><td>/log</td><td>Lecturer</td><td>Scan log with filters</td></tr><tr><td>/verify, /verify/[token]</td><td>Public</td><td>Card check for anyone</td></tr><tr><td>/api/health</td><td>Railway</td><td>Health check with database ping</td></tr></table>
 </section>
 
-<section class="section"><h2>4. Screen walkthrough</h2><h3>Log in</h3>${fig("login", "Log-in page.")}</section>
-<section class="section"><h3>Student ID card</h3>${fig("card", "The demo student's card.")}</section>
-<section class="section"><h3>Lecturer scanner</h3>${fig("scan", "Scanner before any scan.")}</section>
-<section class="section"><h3>Scan results</h3>${fig("results", "A Law student, then a CSC 311 student, scanned for CSC 311. Newest on top.")}</section>
-<section class="section"><h3>Class list</h3>${fig("roster", "CSC 311 class list.")}</section>
-<section class="section"><h3>Public card check</h3>${fig("public", "Opened from the QR code with any phone camera.")}</section>
-<section class="section"><h2>5. Mobile view</h2><p>All grids use <code>minmax(0, 1fr)</code>. The e2e mobile test fails if the page scrolls sideways.</p>${fig("mcard", "Student card on a phone.")}</section>
-<section class="section">${fig("mscan", "Lecturer scanning on a phone.")}</section>
+<section class="section"><h2>4. Screen walkthrough</h2><h3>Sign in</h3>${fig("login", "Sign-in page.")}</section>
+<section class="section"><h3>Student: ID wallet</h3>${fig("card", "The demo student's ID wallet.")}</section>
+<section class="section"><h3>Student: QR shown full screen</h3>${fig("qr", "The QR the lecturer scans.")}</section>
+<section class="section"><h3>Lecturer: checkpoint</h3>${fig("scan", "Checkpoint for CSC 311 before the first scan.")}</section>
+<section class="section"><h3>Lecturer: a student from another department</h3>${fig("result", "A Law student scanned at CSC 311.")}</section>
+<section class="section"><h3>Lecturer: a registered student</h3>${fig("admit", "A CSC 311 student scanned.")}</section>
+<section class="section"><h3>Lecturer: classes</h3>${fig("classes", "Every class the lecturer teaches.")}</section>
+<section class="section"><h3>Lecturer: attendance register</h3>${fig("register", "CSC 311 register.")}</section>
+<section class="section"><h3>Lecturer: scan log</h3>${fig("log", "All checks, newest first.")}</section>
+<section class="section"><h3>Public verification</h3>${fig("public", "Opened from the QR code with any phone camera.")}</section>
+<section class="section"><h2>5. Mobile view</h2><p>All grids use <code>minmax(0, 1fr)</code>. The mobile e2e test fails if the page scrolls sideways, and checks that the result is scrolled into view.</p>${fig("mcard", "Student ID on a phone.")}</section>
+<section class="section">${fig("mscan", "Lecturer checkpoint on a phone after a scan.")}</section>
 
 <section class="section"><h2>6. Running locally</h2>
 <pre>service postgresql start
@@ -244,12 +263,12 @@ npm run dev               # http://localhost:3000</pre>
 <section class="section"><h2>9. Five minute presentation script</h2>
 <table class="script"><tr><th>Time</th><th>What to do and say</th></tr>
 <tr><td>0:00</td><td>Problem: lecturers cannot easily tell whether someone in class is a UniUyo student, or whether they belong to the course. Paper IDs are easy to fake. We use the existing student register and add a signed QR code.</td></tr>
-<tr><td>0:30</td><td>On a phone, log in as the student (Ubong Akpan). Show the card: photo, name, reg number, department, expiry, QR, and the registered courses.</td></tr>
-<tr><td>1:15</td><td>On the laptop, log in as the lecturer. Point out the sidebar: courses and recent scans. CSC 311 is selected.</td></tr>
-<tr><td>1:40</td><td>Click Camera and scan the phone's card: green, Belongs to CSC 311, with the student's details.</td></tr>
+<tr><td>0:30</td><td>On a phone, log in as the student (Ubong Akpan). Show the wallet: the card, Back to flip it, the classes it admits them to. Tap Show QR to lecturer; point out the live clock.</td></tr>
+<tr><td>1:15</td><td>On the laptop, log in as the lecturer. The checkpoint opens for CSC 311 with today&apos;s counters.</td></tr>
+<tr><td>1:40</td><td>Click Start camera and hold the phone&apos;s QR up: green ADMIT, the student&apos;s photo and the three checks. The Admitted counter goes up.</td></tr>
 <tr><td>2:20</td><td>Type the Law student's registration number UU/23/LAW/112: amber, UniUyo student, not in this class. This is the case the lecturer asked for.</td></tr>
 <tr><td>2:50</td><td>Click the forged code sample: red, Not a UniUyo ID. Explain the HMAC signature in one sentence. Click the suspended sample: red.</td></tr>
-<tr><td>3:30</td><td>Open CSC 311 in the sidebar: class list, verified today, flags for the suspended and expiring cards.</td></tr>
+<tr><td>3:30</td><td>Open Attendance register: present today, not yet checked, card problems. Then Scan log, filtered to Rejected.</td></tr>
 <tr><td>4:00</td><td>Scan the student's QR with the phone's normal camera app: the public page says Genuine UniUyo student ID.</td></tr>
 <tr><td>4:20</td><td>Architecture and tests: Next.js Server Components and Actions, Drizzle with Postgres, pure verdict functions, test counts, Railway with health checks.</td></tr>
 <tr><td>4:45</td><td>Next steps: attendance export per lecture, card reissue workflow at the ICT Centre. Questions.</td></tr></table>
@@ -259,7 +278,8 @@ npm run dev               # http://localhost:3000</pre>
     await printPdf(html, "docs/UniUyo-ID-Documentation.pdf", "UniUyo ID documentation");
     console.log("wrote docs/UniUyo-ID-Documentation.pdf");
   } finally {
-    server.kill();
+    // Stop the whole process group so no Next.js server is left holding the port.
+    if (server.pid) process.kill(-server.pid, "SIGTERM");
   }
 }
 

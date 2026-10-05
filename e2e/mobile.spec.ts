@@ -11,11 +11,9 @@ test("mobile: card fits the screen and the lecturer can scan from a phone", asyn
   await page.getByTestId("logout").click({ force: true }).catch(() => {});
   await page.context().clearCookies();
   await signIn(page, "lecturer");
-  await page.getByTestId("open-sidebar").click();
-  await expect(page.getByTestId("new-scan")).toBeVisible();
-  await page.getByTestId("new-scan").click();
-  await page.getByText("Sample: Tobi Adebayo (suspended)").click();
+  await page.getByTestId("samples").getByText("Tobi Adebayo (suspended)").click();
   await expect(page.getByTestId("result").first()).toHaveAttribute("data-result", "suspended");
+  await expect(page.getByTestId("result")).toBeInViewport();
   expect(await overflow()).toBeLessThanOrEqual(0);
   await ctx.close();
 });
